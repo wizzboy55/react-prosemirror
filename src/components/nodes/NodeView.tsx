@@ -8,16 +8,17 @@ import React, {
   ComponentType,
   createContext,
   memo,
+  useCallback,
   useContext,
   useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
+  useSyncExternalStore,
 } from "react";
 
+import { EditorStateStoreContext } from "../../contexts/EditorStateStoreContext.js";
 import { NodeViewContext } from "../../contexts/NodeViewContext.js";
-import { useEditorStateSelector } from "../../hooks/useEditorStateSelector.js";
-import { reactKeysPluginKey } from "../../plugins/reactKeys.js";
 
 import { DefaultNodeView } from "./DefaultNodeView.js";
 import { NodeViewComponentProps } from "./NodeViewComponentProps.js";
@@ -37,8 +38,18 @@ export const NodeView = memo(function NodeView({
   ...props
 }: Props) {
   const renderRef = useRef<JSX.Element | null>(null);
-  const frozen = useEditorStateSelector(
-    (state) => reactKeysPluginKey.getState(state)?.freezeFrom === props.getPos()
+  // The store notifies only when the frozen position changes, so a transaction
+  // does not run one getPos() per node view.
+  const store = useContext(EditorStateStoreContext);
+  const { getPos } = props;
+  const isFrozen = useCallback(() => {
+    const freezeFrom = store.getFreezeFrom();
+    return freezeFrom !== null && freezeFrom === getPos();
+  }, [store, getPos]);
+  const frozen = useSyncExternalStore(
+    store.subscribeFreezeFrom,
+    isFrozen,
+    isFrozen
   );
   const { components, constructors } = useContext(NodeViewContext);
 

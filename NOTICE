@@ -35,3 +35,10 @@ Modifications:
   src/hooks/useEditorStoreConsumer.ts,
   src/hooks/__tests__/useEditorEffect.test.tsx,
   src/components/__tests__/renderPasses.test.tsx.
+
+- No per-node store subscription: the editor store computes the composition
+  freeze position once per state and notifies node views only when it
+  changes, instead of every NodeView running a getPos() selector per state.
+  Files: src/contexts/EditorStateStoreContext.ts,
+  src/components/nodes/NodeView.tsx,
+  src/components/__tests__/renderPasses.test.tsx.

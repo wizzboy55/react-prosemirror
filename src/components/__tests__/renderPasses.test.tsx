@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { act, render } from "@testing-library/react";
 import { Schema } from "prosemirror-model";
-import { EditorState, Transaction } from "prosemirror-state";
+import { EditorState, TextSelection, Transaction } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import React, {
   Profiler,
   forwardRef,
   useContext,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useState,
@@ -20,7 +21,7 @@ import { NodeViewContext } from "../../contexts/NodeViewContext.js";
 import { useEditorEffect } from "../../hooks/useEditorEffect.js";
 import { useEditorState } from "../../hooks/useEditorState.js";
 import { useLayoutGroupEffect } from "../../hooks/useLayoutGroupEffect.js";
-import { reactKeys } from "../../plugins/reactKeys.js";
+import { reactKeys, reactKeysPluginKey } from "../../plugins/reactKeys.js";
 import { LayoutGroup } from "../LayoutGroup.js";
 import { ProseMirror } from "../ProseMirror.js";
 import { DocNodeViewContext, ProseMirrorDoc } from "../ProseMirrorDoc.js";
@@ -415,5 +416,90 @@ describe("dropped transactions", () => {
     expect(consumerCommits).toBe(before + 1);
     expect(getByTestId("state").textContent).toBe("oxnetwo");
     observer.disconnect();
+  });
+});
+
+describe("composition freeze", () => {
+  function manyParagraphs(count: number) {
+    return EditorState.create({
+      doc: schema.node(
+        "doc",
+        null,
+        Array.from({ length: count }, (_, i) =>
+          schema.node("paragraph", null, [schema.text(`p${i}`)])
+        )
+      ),
+      plugins: [reactKeys()],
+    });
+  }
+
+  function renderEditor(state: EditorState) {
+    let view: EditorView | null = null;
+    let mounts = 0;
+    const Paragraph = forwardRef<HTMLParagraphElement, NodeViewComponentProps>(
+      function Paragraph({ nodeProps, children, ...props }, ref) {
+        useEffect(() => {
+          mounts++;
+        }, []);
+        void nodeProps;
+        return (
+          <p ref={ref} {...props}>
+            {children}
+          </p>
+        );
+      }
+    );
+    function CaptureView() {
+      useEditorEffect((v) => {
+        view = v;
+      });
+      return null;
+    }
+    const components = { paragraph: Paragraph };
+    const result = render(
+      <ProseMirror defaultState={state} nodeViewComponents={components}>
+        <ProseMirrorDoc data-testid="doc" />
+        <CaptureView />
+      </ProseMirror>
+    );
+    return { ...result, view: () => view!, mounts: () => mounts };
+  }
+
+  it("keeps a frozen node's DOM and remounts it when unfrozen", () => {
+    const { view, mounts, getByTestId } = renderEditor(manyParagraphs(3));
+    const first = () => getByTestId("doc").firstElementChild!;
+    const mountsBefore = mounts();
+
+    act(() => {
+      view().dispatch(
+        view().state.tr.setMeta(reactKeysPluginKey, { freezeFrom: 0 })
+      );
+    });
+    act(() => {
+      view().dispatch(
+        view().state.tr.insertText("X", 1).setMeta("composition", 1)
+      );
+    });
+    expect(view().state.doc.firstChild!.textContent).toBe("Xp0");
+    expect(first().textContent).toBe("p0");
+
+    act(() => {
+      view().dispatch(
+        view().state.tr.setMeta(reactKeysPluginKey, { freezeFrom: null })
+      );
+    });
+    expect(first().textContent).toBe("Xp0");
+    expect(mounts()).toBe(mountsBefore + 1);
+  });
+
+  it("reads the freeze state once per transaction, not once per node view", () => {
+    const { view } = renderEditor(manyParagraphs(30));
+    const getState = jest.spyOn(reactKeysPluginKey, "getState");
+    act(() => {
+      const { tr } = view().state;
+      view().dispatch(tr.setSelection(TextSelection.create(tr.doc, 3)));
+    });
+    expect(getState.mock.calls.length).toBeLessThan(5);
+    getState.mockRestore();
   });
 });
