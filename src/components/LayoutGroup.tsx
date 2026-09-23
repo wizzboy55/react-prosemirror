@@ -1,5 +1,5 @@
 /* Copyright (c) The New York Times Company */
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useInsertionEffect, useRef } from "react";
 import type { EffectCallback } from "react";
 
 import { LayoutGroupContext } from "../contexts/LayoutGroupContext.js";
@@ -8,6 +8,20 @@ import { useForceUpdate } from "../hooks/useForceUpdate.js";
 
 export interface LayoutGroupProps {
   children: React.ReactNode;
+}
+
+// React 17 has no insertion effects; a layout effect still marks the group
+// before its later siblings' layout effects register.
+const useCommitEffect = useInsertionEffect ?? useClientLayoutEffect;
+
+/**
+ * Rendered as the group's first child: its insertion effect runs at the start
+ * of every commit that includes the group's render, before any descendant
+ * cleans up or registers a layout group effect.
+ */
+function CommitSentinel({ onCommit }: { onCommit: () => void }) {
+  useCommitEffect(onCommit);
+  return null;
 }
 
 /**
@@ -24,6 +38,12 @@ export function LayoutGroup({ children }: LayoutGroupProps) {
 
   const forceUpdate = useForceUpdate();
   const isUpdatePending = useRef(true);
+
+  // This commit runs the group's own layout effect, which flushes both queues,
+  // so registrations made during it must not force another render and commit.
+  const markUpdatePending = useCallback(() => {
+    isUpdatePending.current = true;
+  }, []);
 
   const ensureFlush = useCallback(() => {
     if (!isUpdatePending.current) {
@@ -76,6 +96,7 @@ export function LayoutGroup({ children }: LayoutGroupProps) {
 
   return (
     <LayoutGroupContext.Provider value={register}>
+      <CommitSentinel onCommit={markUpdatePending} />
       {children}
     </LayoutGroupContext.Provider>
   );

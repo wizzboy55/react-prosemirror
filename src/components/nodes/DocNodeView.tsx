@@ -38,8 +38,13 @@ export const DocNodeView = memo(
     ref
   ) {
     const innerRef = useRef<HTMLElement>(null);
-    useImperativeHandle(ref, () => innerRef.current as HTMLElement);
-    useImperativeHandle(setMount, () => innerRef.current as HTMLElement);
+    // The root element only changes with `as`. Without deps, every render
+    // would call setMount(null) and then setMount(el), which queues an extra
+    // render and commit of ProseMirrorInner on every transaction.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useImperativeHandle(ref, () => innerRef.current as HTMLElement, [as]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useImperativeHandle(setMount, () => innerRef.current as HTMLElement, [as]);
 
     const nodeProps = useMemo(
       () => ({

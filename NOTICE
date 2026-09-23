@@ -15,3 +15,10 @@ Modifications:
 - Packaging: build on install from a git dependency (`prepare` script), an npm
   lockfile for that build, and this NOTICE.
   Files: package.json, package-lock.json, NOTICE.
+
+- Render and commit once per transaction: DocNodeView's imperative handles
+  take deps (no setMount(null)/setMount(el) per render), and LayoutGroup no
+  longer forces a re-render for effects registered in a commit that already
+  runs its layout effect.
+  Files: src/components/nodes/DocNodeView.tsx, src/components/LayoutGroup.tsx,
+  src/components/__tests__/renderPasses.test.tsx.
