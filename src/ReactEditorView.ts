@@ -6,34 +6,16 @@ import {
   EditorView,
 } from "prosemirror-view";
 
-import { AbstractEditorView, NodeViewSet } from "./AbstractEditorView.js";
+import {
+  AbstractEditorView,
+  NodeViewSet,
+  buildNodeViews,
+  changedNodeViews,
+  getEditable,
+} from "./AbstractEditorView.js";
 import { EMPTY_STATE } from "./constants.js";
 import { DOMNode, DOMSelection, DOMSelectionRange } from "./dom.js";
 import { NodeViewDesc, ViewDesc } from "./viewdesc.js";
-
-function buildNodeViews(view: ReactEditorView) {
-  const result: NodeViewSet = Object.create(null);
-  function add(obj: NodeViewSet) {
-    for (const prop in obj)
-      if (!Object.prototype.hasOwnProperty.call(result, prop))
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        result[prop] = obj[prop]!;
-  }
-  view.someProp("nodeViews", add);
-  view.someProp("markViews", add);
-  return result;
-}
-
-function changedNodeViews(a: NodeViewSet, b: NodeViewSet) {
-  let nA = 0,
-    nB = 0;
-  for (const prop in a) {
-    if (a[prop] != b[prop]) return true;
-    nA++;
-  }
-  for (const _ in b) nB++;
-  return nA != nB;
-}
 
 interface DOMObserver {
   observer: MutationObserver | null;
@@ -203,10 +185,7 @@ export class ReactEditorView extends EditorView implements AbstractEditorView {
       }
     }
 
-    this.editable = !this.someProp(
-      "editable",
-      (value) => value(this.state) === false
-    );
+    this.editable = getEditable(this);
   }
 
   updateState(state: EditorState) {

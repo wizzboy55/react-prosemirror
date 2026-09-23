@@ -36,7 +36,7 @@ export function useEditorEventCallback<This, T extends unknown[], R>(
   callback: (this: This, view: EditorView, ...args: T) => R
 ) {
   const ref = useRef(callback);
-  const { view } = useContext(EditorContext);
+  const editor = useContext(EditorContext);
 
   useEditorEffect(() => {
     ref.current = callback;
@@ -44,9 +44,10 @@ export function useEditorEventCallback<This, T extends unknown[], R>(
 
   return useCallback(
     function (this: This, ...args: T) {
+      const { view } = editor;
       assertIsReactEditorView(view);
       return ref.current.call(this, view, ...args);
     },
-    [view]
+    [editor]
   );
 }

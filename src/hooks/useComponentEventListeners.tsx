@@ -1,7 +1,9 @@
 /* Copyright (c) The New York Times Company */
 import type { DOMEventMap, EditorView } from "prosemirror-view";
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useReducer, useRef, useState } from "react";
 import { unstable_batchedUpdates as batch } from "react-dom";
+
+import { useClientLayoutEffect } from "./useClientLayoutEffect.js";
 
 export type EventHandler<
   EventType extends keyof DOMEventMap = keyof DOMEventMap
@@ -25,25 +27,33 @@ export type HandleDOMEvents = Record<
  *
  * @privateRemarks
  *
- * This hook uses a combination of mutable and immutable updates to give
- * us precise control over when we re-create the event listeners.
- *
- * The hook has a mutable reference to the set of handlers for each
- * event type, but the set of event types is static. This means that we
- * need to produce a new handleDOMEVents record whenever a new event type is
- * registered. We avoid producing a new record in any other
- * scenario to avoid the performance overhead of re-registering the event
- * listeners in the EditorView.
- *
- * To accomplish this, we shallowly clone the registry whenever a new event
- * type is registered.
+ * The registry of component handlers is mutable and the register functions
+ * never change, so registering a handler does not change the editor context.
+ * The handleDOMEvents record changes only when an event type is added: the
+ * EditorView adds a DOM listener for each of its types. The prop's handlers
+ * run after the component handlers, and take effect in the render that
+ * passes them, so mounting an editor with them needs no second render.
  */
 export function useComponentEventListeners(
   handleDOMEventsProp: HandleDOMEvents | undefined
 ) {
-  const [registry, setRegistry] = useState(
-    new Map<keyof DOMEventMap, Array<EventHandler>>()
+  const [registry] = useState(
+    () => new Map<keyof DOMEventMap, Array<EventHandler>>()
   );
+  const [registeredTypes, addRegisteredType] = useReducer(
+    (count: number) => count + 1,
+    0
+  );
+  const propRef = useRef(handleDOMEventsProp);
+  useClientLayoutEffect(() => {
+    propRef.current = handleDOMEventsProp;
+  }, [handleDOMEventsProp]);
+
+  const propTypes = handleDOMEventsProp
+    ? Object.keys(handleDOMEventsProp)
+        .filter((eventType) => handleDOMEventsProp[eventType])
+        .join(" ")
+    : "";
 
   const registerEventListener = useCallback(
     (eventType: keyof DOMEventMap, handler: EventHandler) => {
@@ -51,7 +61,7 @@ export function useComponentEventListeners(
       handlers.unshift(handler);
       if (!registry.has(eventType)) {
         registry.set(eventType, handlers);
-        setRegistry(new Map(registry));
+        addRegisteredType();
       }
     },
     [registry]
@@ -65,27 +75,20 @@ export function useComponentEventListeners(
     [registry]
   );
 
-  useLayoutEffect(() => {
-    if (!handleDOMEventsProp) return;
-    for (const [eventType, handler] of Object.entries(handleDOMEventsProp)) {
-      if (!handler) return;
-      registerEventListener(eventType, handler);
-    }
-
-    return () => {
-      for (const [eventType, handler] of Object.entries(handleDOMEventsProp)) {
-        if (!handler) return;
-        unregisterEventListener(eventType, handler);
-      }
-    };
-  }, [handleDOMEventsProp, registerEventListener, unregisterEventListener]);
-
   const handleDOMEvents = useMemo(() => {
     const domEventHandlers: HandleDOMEvents = {};
+    const eventTypes = new Set([
+      ...registry.keys(),
+      ...(propTypes ? propTypes.split(" ") : []),
+    ]);
 
-    for (const [eventType, handlers] of registry.entries()) {
+    for (const eventType of eventTypes) {
       function handleEvent(view: EditorView, event: Event) {
-        for (const handler of handlers) {
+        const propHandler = propRef.current?.[eventType];
+        const handlers = registry.get(eventType) ?? [];
+        for (const handler of propHandler
+          ? [...handlers, propHandler]
+          : handlers) {
           let handled = false;
           batch(() => {
             handled = !!handler(view, event);
@@ -99,7 +102,9 @@ export function useComponentEventListeners(
     }
 
     return domEventHandlers;
-  }, [registry]);
+    // registeredTypes counts the registry's event types.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registry, registeredTypes, propTypes]);
 
   return {
     registerEventListener,

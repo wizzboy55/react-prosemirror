@@ -7,6 +7,6 @@ import {
 } from "../plugins/reactKeys.js";
 
 export function useReactKeys(): ReactKeysPluginState | undefined {
-  const { view } = useContext(EditorContext);
-  return reactKeysPluginKey.getState(view.state);
+  const editor = useContext(EditorContext);
+  return reactKeysPluginKey.getState(editor.view.state);
 }

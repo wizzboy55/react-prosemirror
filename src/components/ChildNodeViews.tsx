@@ -117,7 +117,7 @@ const ChildView = memo(function ChildView({
   child: Child;
   getInnerPos: () => number;
 }) {
-  const { view } = useContext(EditorContext);
+  const editor = useContext(EditorContext);
 
   const childRef = useRef<Child>(child);
   childRef.current = child;
@@ -140,7 +140,7 @@ const ChildView = memo(function ChildView({
     <ChildDescriptionsContext.Consumer key={child.key}>
       {({ siblingsRef, parentRef }) => (
         <TextNodeView
-          view={view}
+          editor={editor}
           node={child.node}
           getPos={getPos}
           siblingsRef={siblingsRef}
@@ -426,7 +426,7 @@ export const ChildNodeViews = memo(function ChildNodeViews({
   node: Node | undefined;
   innerDecorations: DecorationSource;
 }) {
-  const { view } = useContext(EditorContext);
+  const editor = useContext(EditorContext);
 
   const getInnerPos = useCallback(() => getPos() + 1, [getPos]);
 
@@ -443,7 +443,7 @@ export const ChildNodeViews = memo(function ChildNodeViews({
     node,
     innerDecorations,
     (widget, isNative, offset, index) => {
-      const keys = reactKeysPluginKey.getState(view.state);
+      const keys = reactKeysPluginKey.getState(editor.view.state);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const widgetMarks = ((widget as any).type.spec.marks as Mark[]) ?? [];
       let key;
@@ -497,7 +497,7 @@ export const ChildNodeViews = memo(function ChildNodeViews({
       );
     },
     (childNode, outerDeco, innerDeco, offset, index) => {
-      const keys = reactKeysPluginKey.getState(view.state);
+      const keys = reactKeysPluginKey.getState(editor.view.state);
       const key = createKey(getInnerPos(), offset, index, "node", keys);
       const child = {
         type: "node",

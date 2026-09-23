@@ -1,12 +1,34 @@
 import { EditorState } from "prosemirror-state";
 import { DirectEditorProps, EditorProps } from "prosemirror-view";
 
-import { AbstractEditorView, NodeViewSet } from "./AbstractEditorView.js";
+import {
+  AbstractEditorView,
+  NodeViewSet,
+  buildNodeViews,
+  changedNodeViews,
+  getEditable,
+} from "./AbstractEditorView.js";
 
+/**
+ * Stands in for the view of a static editor, and for an editable editor's view
+ * until its document mounts. A provisional stand-in resolves node views and
+ * `editable` like a ReactEditorView does, so that the first render already
+ * produces the document the mounted view keeps.
+ */
 export class StaticEditorView implements AbstractEditorView {
-  readonly nodeViews: NodeViewSet = {};
+  nodeViews: NodeViewSet = {};
 
-  constructor(public props: DirectEditorProps) {}
+  editable = false;
+
+  constructor(
+    public props: DirectEditorProps,
+    private readonly provisional = false
+  ) {
+    if (provisional) {
+      this.nodeViews = buildNodeViews(this);
+      this.editable = getEditable(this);
+    }
+  }
 
   get composing() {
     return false;
@@ -14,10 +36,6 @@ export class StaticEditorView implements AbstractEditorView {
 
   get dom() {
     return null;
-  }
-
-  get editable() {
-    return false;
   }
 
   get state() {
@@ -33,7 +51,21 @@ export class StaticEditorView implements AbstractEditorView {
   }
 
   update(props: DirectEditorProps) {
+    const prevProps = this.props;
     this.props = props;
+    if (!this.provisional) return;
+
+    if (
+      prevProps.state.plugins !== props.state.plugins ||
+      prevProps.plugins !== props.plugins ||
+      prevProps.nodeViews !== props.nodeViews
+    ) {
+      const nodeViews = buildNodeViews(this);
+      if (changedNodeViews(this.nodeViews, nodeViews)) {
+        this.nodeViews = nodeViews;
+      }
+    }
+    this.editable = getEditable(this);
   }
 
   updateState(state: EditorState) {

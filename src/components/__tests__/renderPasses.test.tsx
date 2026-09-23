@@ -1,7 +1,12 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { act, render } from "@testing-library/react";
 import { Schema } from "prosemirror-model";
-import { EditorState, TextSelection, Transaction } from "prosemirror-state";
+import {
+  EditorState,
+  Plugin,
+  TextSelection,
+  Transaction,
+} from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import React, {
   Profiler,
@@ -19,9 +24,11 @@ import { EditorStateStoreContext } from "../../contexts/EditorStateStoreContext.
 import { LayoutGroupContext } from "../../contexts/LayoutGroupContext.js";
 import { NodeViewContext } from "../../contexts/NodeViewContext.js";
 import { useEditorEffect } from "../../hooks/useEditorEffect.js";
+import { useEditorEventListener } from "../../hooks/useEditorEventListener.js";
 import { useEditorState } from "../../hooks/useEditorState.js";
 import { useLayoutGroupEffect } from "../../hooks/useLayoutGroupEffect.js";
 import { reactKeys, reactKeysPluginKey } from "../../plugins/reactKeys.js";
+import { useMergedDOMRefs } from "../../refs.js";
 import { LayoutGroup } from "../LayoutGroup.js";
 import { ProseMirror } from "../ProseMirror.js";
 import { DocNodeViewContext, ProseMirrorDoc } from "../ProseMirrorDoc.js";
@@ -118,6 +125,169 @@ describe("render passes", () => {
     });
     expect(commits).toBe(1);
     expect(view!.state.doc.firstChild!.textContent).toBe("oxne");
+  });
+});
+
+describe("mount", () => {
+  type MountedView = EditorView & {
+    docView: { node: unknown; children: { node?: unknown }[] };
+  };
+
+  it("mounts in one commit, with the view committed before editor effects", () => {
+    let commits = 0;
+    const firstRun: {
+      docNode?: unknown;
+      children?: number;
+      pluginView?: boolean;
+    }[] = [];
+    let pluginViews = 0;
+    const plugin = new Plugin({
+      view() {
+        pluginViews++;
+        return {};
+      },
+    });
+    const state = EditorState.create({
+      doc: createState().doc,
+      plugins: [reactKeys(), plugin],
+    });
+
+    function CaptureView() {
+      useEditorEffect((v) => {
+        const view = v as MountedView;
+        firstRun.push({
+          docNode: view.docView.node,
+          children: view.docView.children.length,
+          pluginView: pluginViews === 1,
+        });
+      }, []);
+      return null;
+    }
+
+    const { getByTestId } = render(
+      <Profiler id="editor" onRender={() => commits++}>
+        <ProseMirror defaultState={state}>
+          <ProseMirrorDoc data-testid="doc" />
+          <CaptureView />
+        </ProseMirror>
+      </Profiler>
+    );
+
+    expect(commits).toBe(1);
+    expect(firstRun).toEqual([
+      { docNode: state.doc, children: 2, pluginView: true },
+    ]);
+    const doc = getByTestId("doc");
+    expect(doc.getAttribute("contenteditable")).toBe("true");
+    expect(
+      [...doc.querySelectorAll("p")].map((p) =>
+        p.getAttribute("contenteditable")
+      )
+    ).toEqual([null, null]);
+  });
+
+  it("renders each React node view once on mount", () => {
+    let commits = 0;
+    const renders: number[] = [];
+    const Paragraph = forwardRef<HTMLParagraphElement, NodeViewComponentProps>(
+      function Paragraph({ nodeProps, children, ...props }, ref) {
+        renders.push(nodeProps.getPos());
+        return (
+          <p {...props} ref={useMergedDOMRefs(ref, nodeProps.contentDOMRef)}>
+            {children}
+          </p>
+        );
+      }
+    );
+    const components = { paragraph: Paragraph };
+
+    const { getByTestId } = render(
+      <Profiler id="editor" onRender={() => commits++}>
+        <ProseMirror
+          defaultState={createState()}
+          nodeViewComponents={components}
+        >
+          <ProseMirrorDoc data-testid="doc" />
+        </ProseMirror>
+      </Profiler>
+    );
+
+    expect(commits).toBe(1);
+    expect(renders).toEqual([0, 5]);
+    expect(
+      [...getByTestId("doc").querySelectorAll("p")].map((p) =>
+        p.getAttribute("contenteditable")
+      )
+    ).toEqual([null, null]);
+  });
+
+  it("gives effects the view when the document mounts after the editor", () => {
+    const views: EditorView[] = [];
+
+    function CaptureView() {
+      useEditorEffect((v) => {
+        views.push(v);
+      }, []);
+      return null;
+    }
+
+    function Editor({ showDoc }: { showDoc: boolean }) {
+      return (
+        <ProseMirror defaultState={createState()}>
+          {showDoc && <ProseMirrorDoc data-testid="doc" />}
+          <CaptureView />
+        </ProseMirror>
+      );
+    }
+
+    const { rerender, getByTestId } = render(<Editor showDoc={false} />);
+    expect(views).toEqual([]);
+    rerender(<Editor showDoc />);
+    expect(views).toHaveLength(1);
+    expect(views[0]!.dom).toBe(getByTestId("doc"));
+    const docView = (views[0] as MountedView).docView;
+    expect(docView.children).toHaveLength(2);
+  });
+
+  it("handles DOM events from the prop and from components on mount", () => {
+    let commits = 0;
+    const calls: string[] = [];
+    const handleDOMEvents = {
+      keydown: () => {
+        calls.push("prop");
+        return false;
+      },
+    };
+
+    function Listener() {
+      useEditorEventListener("keydown", () => {
+        calls.push("component");
+        return false;
+      });
+      return null;
+    }
+
+    const { getByTestId } = render(
+      <Profiler id="editor" onRender={() => commits++}>
+        <ProseMirror
+          defaultState={createState()}
+          handleDOMEvents={handleDOMEvents}
+        >
+          <ProseMirrorDoc data-testid="doc" />
+          <Listener />
+        </ProseMirror>
+      </Profiler>
+    );
+
+    // The component's listener adds an event type, which renders the editor
+    // once more: only the editor itself, not its node views.
+    expect(commits).toBeLessThanOrEqual(2);
+    act(() => {
+      getByTestId("doc").dispatchEvent(
+        new KeyboardEvent("keydown", { key: "a", bubbles: true })
+      );
+    });
+    expect(calls).toEqual(["component", "prop"]);
   });
 });
 

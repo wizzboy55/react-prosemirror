@@ -75,10 +75,9 @@ function ProseMirrorInner({
   markViewComponents,
   ...props
 }: Props) {
-  const [mount, setMount] = useState<HTMLElement | null>(null);
   const stateStore = useContext(EditorStateStoreContext);
 
-  const { editor, state } = useEditor(mount, props, stateStore);
+  const { editor, state, setMount } = useEditor(props, stateStore);
 
   const nodeViewConstructors = editor.view.nodeViews;
   // Callers often pass the component maps inline; keep the context value while
@@ -105,7 +104,7 @@ function ProseMirrorInner({
       decorations,
       innerDecorations,
     }),
-    [node, decorations, innerDecorations]
+    [setMount, node, decorations, innerDecorations]
   );
   // The provider values above the node views never change per transaction:
   // ProseMirrorDoc and useEditorState read the latest values published here.

@@ -25,6 +25,7 @@ import {
   StopEventContext,
 } from "../../contexts/StopEventContext.js";
 import { DOMNode } from "../../dom.js";
+import { useClientLayoutEffect } from "../../hooks/useClientLayoutEffect.js";
 import { useForceUpdate } from "../../hooks/useForceUpdate.js";
 import { useNodeViewDescription } from "../../hooks/useNodeViewDescription.js";
 import { ChildNodeViews, wrapInDeco } from "../ChildNodeViews.js";
@@ -52,6 +53,17 @@ export const ReactNodeView = memo(function ReactNodeView({
   const domRef = useRef<HTMLElement | null>(null);
   const nodeDOMRef = useRef<HTMLElement | null>(null);
   const contentDOMRef = useRef<HTMLElement | null>(null);
+
+  // Before its elements mount, a node view assumes that a node with content
+  // gets a content DOM, so that it renders once. What the last render assumed
+  // decides whether an element attaching or detaching needs another render.
+  const mountedRef = useRef(false);
+  const hasContentDOM = mountedRef.current
+    ? !!contentDOMRef.current
+    : !node.isLeaf;
+  const nodeDOMIsBR = nodeDOMRef.current?.nodeName === "BR";
+  const renderedRef = useRef({ hasContentDOM, nodeDOMIsBR });
+  renderedRef.current = { hasContentDOM, nodeDOMIsBR };
 
   const selectNodeRef = useRef<SelectNode | null>(null);
   const deselectNodeRef = useRef<DeselectNode | null>(null);
@@ -159,10 +171,9 @@ export const ReactNodeView = memo(function ReactNodeView({
 
   const setNodeDOM = useCallback(
     (el: HTMLElement | null) => {
-      if (!!nodeDOMRef.current !== !!el) {
-        // Force a re-render if the existence of nodeDOM
-        // is changing, since we use its existince to set
-        // some props
+      if ((el?.nodeName === "BR") !== renderedRef.current.nodeDOMIsBR) {
+        // Force a re-render if whether nodeDOM is a <br>
+        // is changing, since we use it to set some props
         forceUpdate();
       }
       nodeDOMRef.current = el;
@@ -173,7 +184,7 @@ export const ReactNodeView = memo(function ReactNodeView({
 
   const setContentDOM = useCallback(
     (el: HTMLElement | null) => {
-      if (!!contentDOMRef.current !== !!el) {
+      if (mountedRef.current && !!el !== renderedRef.current.hasContentDOM) {
         // Force a re-render if the existence of contentDOM
         // is changing, since we use its existince to set
         // some props
@@ -185,6 +196,15 @@ export const ReactNodeView = memo(function ReactNodeView({
     [forceUpdate, refUpdated]
   );
 
+  // The elements have mounted: render again only if the assumption about the
+  // content DOM was wrong.
+  useClientLayoutEffect(() => {
+    mountedRef.current = true;
+    if (!!contentDOMRef.current !== renderedRef.current.hasContentDOM) {
+      forceUpdate();
+    }
+  }, [forceUpdate]);
+
   const nodeProps = useMemo(
     () => ({
       ...nodeViewDescProps,
@@ -195,9 +215,7 @@ export const ReactNodeView = memo(function ReactNodeView({
 
   const props = {
     nodeProps,
-    ...(!contentDOMRef.current &&
-    !nodeProps.node.isText &&
-    nodeDOMRef.current?.nodeName !== "BR"
+    ...(!hasContentDOM && !nodeProps.node.isText && !nodeDOMIsBR
       ? {
           contentEditable: false,
           suppressContentEditableWarning: true,
@@ -207,7 +225,7 @@ export const ReactNodeView = memo(function ReactNodeView({
       ? { className: "ProseMirror-selectednode" }
       : null),
     ...((!hasCustomSelectNode && selected) ||
-    (!contentDOMRef.current &&
+    (!hasContentDOM &&
       !nodeProps.node.isText &&
       domRef.current?.nodeName !== "BR" &&
       node.type.spec.draggable)

@@ -52,3 +52,26 @@ Modifications:
   Files: src/plugins/reactKeys.ts, src/plugins/keyIndex.ts (new),
   src/components/ChildNodeViews.tsx,
   src/plugins/__tests__/reactKeys.incremental.test.ts (new).
+
+- Single-pass mount: the editor renders its first pass against a provisional
+  static view that resolves node views and `editable` like the mounted view,
+  and creates the ReactEditorView in the document root's ref during that
+  commit. Node and mark views build their descriptions in the same commit, in
+  layout-effect order, and editor effects run once with the mounted view. The
+  editor context value keeps its identity when the view mounts (the view is
+  read when used), DOM event registration no longer changes it, the view is
+  updated only when its props change, and a React node view assumes a content
+  DOM for a node with content on its first render instead of rendering again
+  once it mounts. Prop DOM event handlers run after component handlers.
+  Files: src/hooks/useEditor.ts, src/components/ProseMirror.tsx,
+  src/StaticEditorView.ts, src/ReactEditorView.ts, src/AbstractEditorView.ts,
+  src/contexts/EditorContext.ts, src/hooks/useNodeViewDescription.ts,
+  src/hooks/useMarkViewDescription.ts, src/hooks/useEditorEffect.ts,
+  src/hooks/useEditorEventCallback.ts, src/hooks/useComponentEventListeners.tsx,
+  src/hooks/useReactKeys.ts, src/components/TextNodeView.tsx,
+  src/components/ChildNodeViews.tsx, src/components/SeparatorHackView.tsx,
+  src/components/nodes/ReactNodeView.tsx, src/decorations/computeDocDeco.ts,
+  src/decorations/viewDecorations.tsx,
+  src/tiptap/hooks/useTiptapEditorEffect.ts,
+  src/hooks/__tests__/useEditorEffect.test.tsx,
+  src/components/__tests__/renderPasses.test.tsx.

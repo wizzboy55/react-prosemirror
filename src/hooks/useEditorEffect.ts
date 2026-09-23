@@ -30,7 +30,7 @@ export function useEditorEffect(
   effect: (editorView: EditorView) => void | (() => void),
   dependencies?: DependencyList
 ) {
-  const { view, flushSyncRef } = useContext(EditorContext);
+  const editor = useContext(EditorContext);
 
   // The rules of hooks want `effect` to be included in the
   // dependency list, but dependency issues for `effect` will
@@ -39,8 +39,11 @@ export function useEditorEffect(
   // Note: we specifically don't want to re-run the effect
   // every time it changes, because it will most likely
   // be defined inline and run on every re-render.
+  // The effect reads the view when it runs: layout group effects run after
+  // the document has mounted it, including in the commit that mounts it.
   useLayoutGroupEffect(
     () => {
+      const { view, flushSyncRef } = editor;
       if (view instanceof ReactEditorView) {
         flushSyncRef.current = false;
         const result = effect(view);
@@ -52,6 +55,6 @@ export function useEditorEffect(
     // verify the dependencies for the effect, but this will
     // have already happened at the call-site.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    dependencies && [view, ...dependencies]
+    dependencies && [editor, ...dependencies]
   );
 }

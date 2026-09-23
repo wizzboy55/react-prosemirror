@@ -26,15 +26,18 @@ export function useMarkViewDescription(
   constructor: MarkViewConstructor,
   props: Props
 ) {
-  const { view } = useContext(EditorContext);
+  const editor = useContext(EditorContext);
   const { parentRef, siblingsRef } = useContext(ChildDescriptionsContext);
 
   const contentDOMRef = useRef<HTMLElement | null>(null);
 
   const viewDescRef = useRef<MarkViewDesc | undefined>();
   const childrenRef = useRef<ViewDesc[]>([]);
+  // Cancels building the description while it waits for the view.
+  const cancelPendingRef = useRef<(() => void) | null>(null);
 
   const create = useEffectEvent(() => {
+    const { view } = editor;
     if (!(view instanceof ReactEditorView)) {
       return;
     }
@@ -80,7 +83,7 @@ export function useMarkViewDescription(
   });
 
   const update = useEffectEvent(() => {
-    if (!(view instanceof ReactEditorView)) {
+    if (!(editor.view instanceof ReactEditorView)) {
       return false;
     }
 
@@ -121,21 +124,7 @@ export function useMarkViewDescription(
     contentDOMRef.current = null;
   });
 
-  useClientLayoutEffect(() => {
-    viewDescRef.current = create();
-    return () => {
-      destroy();
-    };
-  }, [create, destroy]);
-
-  const refUpdated = useCallback(() => {
-    if (!update()) {
-      destroy();
-      viewDescRef.current = create();
-    }
-  }, [create, destroy, update]);
-
-  useClientLayoutEffect(() => {
+  const layout = useEffectEvent(() => {
     if (!update()) {
       destroy();
       viewDescRef.current = create();
@@ -160,6 +149,39 @@ export function useMarkViewDescription(
     for (const child of children) {
       child.parent = viewDesc;
     }
+  });
+
+  useClientLayoutEffect(() => {
+    if (editor.isViewPending()) {
+      // The document has not mounted its view yet. Build the description
+      // when it does, later in this commit and in this effect's order.
+      cancelPendingRef.current = editor.whenViewReady(() => {
+        cancelPendingRef.current = null;
+        viewDescRef.current = create();
+        layout();
+      });
+    } else {
+      viewDescRef.current = create();
+    }
+    return () => {
+      cancelPendingRef.current?.();
+      cancelPendingRef.current = null;
+      destroy();
+    };
+    // Every editor context value reads the same view and queue.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [create, destroy, layout]);
+
+  const refUpdated = useCallback(() => {
+    if (!update()) {
+      destroy();
+      viewDescRef.current = create();
+    }
+  }, [create, destroy, update]);
+
+  useClientLayoutEffect(() => {
+    if (cancelPendingRef.current) return;
+    layout();
   });
 
   const childContextValue = useMemo(

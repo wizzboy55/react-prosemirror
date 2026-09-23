@@ -29,14 +29,14 @@ export function useTiptapEditorEffect(
   effect: (editor: Editor) => void | (() => void),
   dependencies?: DependencyList
 ) {
-  const { view } = useContext(EditorContext);
+  const editorContext = useContext(EditorContext);
   const { editor } = useCurrentEditor();
   const { isEditorInitialized } = useContext(TiptapEditorContext);
 
   useEditorEffect(() => {
     if (
       editor?.view instanceof ReactEditorView &&
-      view instanceof ReactEditorView &&
+      editorContext.view instanceof ReactEditorView &&
       isEditorInitialized
     ) {
       return effect(editor);
@@ -45,5 +45,5 @@ export function useTiptapEditorEffect(
     // verify the dependencies for the effect, but this will
     // have already happened at the call-site.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, dependencies && [editor, view, isEditorInitialized, ...dependencies]);
+  }, dependencies && [editor, editorContext, isEditorInitialized, ...dependencies]);
 }

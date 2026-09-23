@@ -2,8 +2,8 @@ import { Node } from "prosemirror-model";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import { Component, MutableRefObject, createRef } from "react";
 
-import { AbstractEditorView } from "../AbstractEditorView.js";
 import { ReactEditorView } from "../ReactEditorView.js";
+import { EditorContextValue } from "../contexts/EditorContext.js";
 import { findDOMNode } from "../findDOMNode.js";
 import { TextViewDesc, ViewDesc, sortViewDescs } from "../viewdesc.js";
 
@@ -45,7 +45,7 @@ function shallowEqual(
 }
 
 type Props = {
-  view: AbstractEditorView;
+  editor: EditorContextValue;
   node: Node;
   getPos: () => number;
   siblingsRef: MutableRefObject<ViewDesc[]>;
@@ -57,11 +57,11 @@ export class TextNodeView extends Component<Props> {
   viewDescRef = createMutRef<TextViewDesc>();
 
   create() {
-    const { view, decorations, siblingsRef, parentRef, getPos, node } =
+    const { editor, decorations, siblingsRef, parentRef, getPos, node } =
       this.props;
     const dom = findDOMNode(this);
 
-    if (!dom && !view.composing) return null;
+    if (!dom && !editor.view.composing) return null;
 
     let textNode: ChildNode | null = dom;
     while (textNode?.firstChild) {
@@ -92,7 +92,8 @@ export class TextNodeView extends Component<Props> {
   }
 
   update() {
-    const { view, node, decorations } = this.props;
+    const { editor, node, decorations } = this.props;
+    const { view } = editor;
 
     if (!(view instanceof ReactEditorView)) return false;
 
@@ -141,14 +142,12 @@ export class TextNodeView extends Component<Props> {
   }
 
   componentDidMount(): void {
+    // A description built from the props it renders already matches them.
     this.viewDescRef.current = this.create();
-    this.updateEffect();
   }
 
   componentDidUpdate(): void {
     this.updateEffect();
-    const { view } = this.props;
-    if (!(view instanceof ReactEditorView)) return;
   }
 
   componentWillUnmount(): void {

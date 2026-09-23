@@ -42,6 +42,8 @@ describe("useEditorEffect", () => {
             registerEventListener,
             unregisterEventListener,
             isStatic: false,
+            isViewPending: () => false,
+            whenViewReady: () => () => {},
           }}
         >
           <TestComponent effect={effect} />
@@ -70,6 +72,8 @@ describe("useEditorEffect", () => {
       registerEventListener,
       unregisterEventListener,
       isStatic: false,
+      isViewPending: () => false,
+      whenViewReady: () => () => {},
     };
 
     const { rerender } = render(
@@ -110,6 +114,8 @@ describe("useEditorEffect", () => {
             registerEventListener,
             unregisterEventListener,
             isStatic: false,
+            isViewPending: () => false,
+            whenViewReady: () => () => {},
           }}
         >
           <TestComponent effect={effect} dependencies={["one"]} />
@@ -126,6 +132,8 @@ describe("useEditorEffect", () => {
             unregisterEventListener,
             flushSyncRef: { current: true },
             isStatic: false,
+            isViewPending: () => false,
+            whenViewReady: () => () => {},
           }}
         >
           <TestComponent effect={effect} dependencies={["two"]} />

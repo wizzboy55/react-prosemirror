@@ -2,7 +2,9 @@ import React, { useContext, useRef, useState } from "react";
 
 import { browser } from "../browser.js";
 import { ChildDescriptionsContext } from "../contexts/ChildDescriptionsContext.js";
+import { EditorContext } from "../contexts/EditorContext.js";
 import { useClientLayoutEffect } from "../hooks/useClientLayoutEffect.js";
+import { useEffectEvent } from "../hooks/useEffectEvent.js";
 import { TrailingHackViewDesc, sortViewDescs } from "../viewdesc.js";
 
 type Props = {
@@ -10,6 +12,7 @@ type Props = {
 };
 
 export function SeparatorHackView({ getPos }: Props) {
+  const editor = useContext(EditorContext);
   const { siblingsRef, parentRef } = useContext(ChildDescriptionsContext);
   const viewDescRef = useRef<TrailingHackViewDesc | null>(null);
   const ref = useRef<HTMLImageElement | null>(null);
@@ -26,10 +29,7 @@ export function SeparatorHackView({ getPos }: Props) {
     };
   }, [siblingsRef]);
 
-  // There's no risk of an infinite loop here, because
-  // we call setShouldRender conditionally
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useClientLayoutEffect(() => {
+  const layout = useEffectEvent(() => {
     const nonHackSiblings = siblingsRef.current.filter(
       (viewdesc) => !(viewdesc instanceof TrailingHackViewDesc)
     );
@@ -60,6 +60,16 @@ export function SeparatorHackView({ getPos }: Props) {
       siblingsRef.current.push(viewDescRef.current);
     }
     siblingsRef.current.sort(sortViewDescs);
+  });
+
+  // There's no risk of an infinite loop here, because
+  // we call setShouldRender conditionally
+  useClientLayoutEffect(() => {
+    // The sibling node views build their descriptions when the document
+    // mounts its view: check them then, later in this commit.
+    if (editor.isViewPending()) return editor.whenViewReady(layout);
+    layout();
+    return undefined;
   });
 
   return shouldRender ? (

@@ -222,3 +222,15 @@ export function viewDecorations(view: AbstractEditorView): DecorationSource {
   }
   return previous;
 }
+
+/**
+ * Hands the decorations last computed for `from` to `to`, so that a view that
+ * replaces a stand-in keeps returning the same value while it is equivalent.
+ */
+export function transferViewDecorationsCache(
+  from: AbstractEditorView,
+  to: AbstractEditorView
+) {
+  const previous = ViewDecorationsCache.get(from);
+  if (previous) ViewDecorationsCache.set(to, previous);
+}

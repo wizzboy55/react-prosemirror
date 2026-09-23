@@ -60,3 +60,15 @@ export function computeDocDeco(view: AbstractEditorView) {
 
   return previous;
 }
+
+/**
+ * Hands the decorations last computed for `from` to `to`, so that a view that
+ * replaces a stand-in keeps returning the same value while it is equivalent.
+ */
+export function transferDocDecoCache(
+  from: AbstractEditorView,
+  to: AbstractEditorView
+) {
+  const previous = DocDecorationsCache.get(from);
+  if (previous) DocDecorationsCache.set(to, previous);
+}
