@@ -8,9 +8,11 @@ import React, {
   useContext,
 } from "react";
 
+import { useEditorStoreConsumer } from "../hooks/useEditorStoreConsumer.js";
+
 import { DocNodeView } from "./nodes/DocNodeView.js";
 
-interface DocNodeViewContextValue {
+export interface DocNodeViewContextValue {
   node: Node;
   getPos: () => number;
   decorations: readonly Decoration[];
@@ -18,8 +20,17 @@ interface DocNodeViewContextValue {
   setMount: (mount: HTMLElement | null) => void;
 }
 
-export const DocNodeViewContext = createContext<DocNodeViewContextValue>(
-  null as unknown as DocNodeViewContextValue
+/**
+ * A stable holder whose value ProseMirrorInner replaces during render. A
+ * context value that changed per transaction would make React walk every
+ * node view under it on each keystroke.
+ */
+export interface DocNodeViewStore {
+  current: DocNodeViewContextValue;
+}
+
+export const DocNodeViewContext = createContext<DocNodeViewStore>(
+  null as unknown as DocNodeViewStore
 );
 
 interface Props extends Omit<HTMLProps<HTMLElement>, "as"> {
@@ -28,7 +39,10 @@ interface Props extends Omit<HTMLProps<HTMLElement>, "as"> {
 
 export const ProseMirrorDoc = forwardRef<HTMLElement, Props>(
   function ProseMirrorDoc({ as, ...props }, ref) {
-    const docProps = useContext(DocNodeViewContext);
+    const docStore = useContext(DocNodeViewContext);
+    const docProps = useEditorStoreConsumer(() => docStore.current, {
+      rendersDocument: true,
+    });
     return <DocNodeView ref={ref} {...props} {...docProps} as={as} />;
   }
 );

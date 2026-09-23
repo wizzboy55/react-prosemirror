@@ -7,7 +7,6 @@ import { ReactEditorView } from "../../ReactEditorView.js";
 import { LayoutGroup } from "../../components/LayoutGroup.js";
 import { EMPTY_STATE } from "../../constants.js";
 import { EditorContext } from "../../contexts/EditorContext.js";
-import { EditorStateContext } from "../../contexts/EditorStateContext.js";
 import { useEditorEffect } from "../useEditorEffect.js";
 
 function TestComponent({
@@ -45,9 +44,7 @@ describe("useEditorEffect", () => {
             isStatic: false,
           }}
         >
-          <EditorStateContext.Provider value={editorState}>
-            <TestComponent effect={effect} />
-          </EditorStateContext.Provider>
+          <TestComponent effect={effect} />
         </EditorContext.Provider>
       </LayoutGroup>
     );
@@ -78,9 +75,7 @@ describe("useEditorEffect", () => {
     const { rerender } = render(
       <LayoutGroup>
         <EditorContext.Provider value={contextValue}>
-          <EditorStateContext.Provider value={editorState}>
-            <TestComponent effect={effect} dependencies={[]} />
-          </EditorStateContext.Provider>{" "}
+          <TestComponent effect={effect} dependencies={[]} />{" "}
         </EditorContext.Provider>
       </LayoutGroup>
     );
@@ -88,9 +83,7 @@ describe("useEditorEffect", () => {
     rerender(
       <LayoutGroup>
         <EditorContext.Provider value={contextValue}>
-          <EditorStateContext.Provider value={editorState}>
-            <TestComponent effect={effect} dependencies={[]} />
-          </EditorStateContext.Provider>
+          <TestComponent effect={effect} dependencies={[]} />
         </EditorContext.Provider>
       </LayoutGroup>
     );
@@ -119,9 +112,7 @@ describe("useEditorEffect", () => {
             isStatic: false,
           }}
         >
-          <EditorStateContext.Provider value={editorState}>
-            <TestComponent effect={effect} dependencies={["one"]} />
-          </EditorStateContext.Provider>
+          <TestComponent effect={effect} dependencies={["one"]} />
         </EditorContext.Provider>
       </LayoutGroup>
     );
@@ -137,9 +128,7 @@ describe("useEditorEffect", () => {
             isStatic: false,
           }}
         >
-          <EditorStateContext.Provider value={editorState}>
-            <TestComponent effect={effect} dependencies={["two"]} />
-          </EditorStateContext.Provider>
+          <TestComponent effect={effect} dependencies={["two"]} />
         </EditorContext.Provider>
       </LayoutGroup>
     );

@@ -1,3 +1,4 @@
+import { EditorState } from "prosemirror-state";
 import React, { ReactNode, useContext, useLayoutEffect, useMemo } from "react";
 
 import {
@@ -5,7 +6,6 @@ import {
   EditorStateStoreContext,
   createEditorStateStore,
 } from "../contexts/EditorStateStoreContext.js";
-import { useEditorState } from "../hooks/useEditorState.js";
 
 interface RegistrarProps {
   children: ReactNode;
@@ -22,11 +22,14 @@ export function EditorStateSelectorsRegistrar({ children }: RegistrarProps) {
 }
 
 interface ProviderProps {
+  state: EditorState;
   children: JSX.Element | null;
 }
 
-export function EditorStateSelectorsProvider({ children }: ProviderProps) {
-  const editorState = useEditorState();
+export function EditorStateSelectorsProvider({
+  state: editorState,
+  children,
+}: ProviderProps) {
   const store = useContext(EditorStateStoreContext);
 
   // This _must_ be set during render so that child components

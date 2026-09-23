@@ -1,11 +1,18 @@
-import React, { ComponentType, ReactNode, useMemo, useState } from "react";
+import React, {
+  ComponentType,
+  ReactNode,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   ChildDescriptionsContext,
   ChildDescriptionsContextValue,
 } from "../contexts/ChildDescriptionsContext.js";
 import { EditorContext } from "../contexts/EditorContext.js";
-import { EditorStateContext } from "../contexts/EditorStateContext.js";
+import { EditorStateStoreContext } from "../contexts/EditorStateStoreContext.js";
 import {
   NodeViewContext,
   NodeViewContextValue,
@@ -19,12 +26,30 @@ import {
   EditorStateSelectorsRegistrar,
 } from "./EditorStateSelectorsProvider.js";
 import { LayoutGroup } from "./LayoutGroup.js";
-import { DocNodeViewContext } from "./ProseMirrorDoc.js";
+import {
+  DocNodeViewContext,
+  DocNodeViewContextValue,
+  DocNodeViewStore,
+} from "./ProseMirrorDoc.js";
 import { MarkViewComponentProps } from "./marks/MarkViewComponentProps.js";
 import { NodeViewComponentProps } from "./nodes/NodeViewComponentProps.js";
 
 function getPos() {
   return -1;
+}
+
+function shallowEqual(a: Record<string, unknown>, b: Record<string, unknown>) {
+  const aKeys = Object.keys(a);
+  if (aKeys.length !== Object.keys(b).length) return false;
+  return aKeys.every(
+    (key) => Object.prototype.hasOwnProperty.call(b, key) && a[key] === b[key]
+  );
+}
+
+function useShallowStable<T extends Record<string, unknown>>(value: T): T {
+  const ref = useRef(value);
+  if (!shallowEqual(ref.current, value)) ref.current = value;
+  return ref.current;
 }
 
 const rootChildDescriptionsContextValue = {
@@ -51,21 +76,28 @@ function ProseMirrorInner({
   ...props
 }: Props) {
   const [mount, setMount] = useState<HTMLElement | null>(null);
+  const stateStore = useContext(EditorStateStoreContext);
 
-  const { editor, state } = useEditor(mount, props);
+  const { editor, state } = useEditor(mount, props, stateStore);
 
   const nodeViewConstructors = editor.view.nodeViews;
+  // Callers often pass the component maps inline; keep the context value while
+  // their entries are unchanged so it does not change on every render.
+  const components = useShallowStable({
+    ...nodeViewComponents,
+    ...markViewComponents,
+  });
   const nodeViewContextValue = useMemo<NodeViewContextValue>(() => {
     return {
-      components: { ...nodeViewComponents, ...markViewComponents },
+      components,
       constructors: nodeViewConstructors,
     };
-  }, [markViewComponents, nodeViewComponents, nodeViewConstructors]);
+  }, [components, nodeViewConstructors]);
 
   const node = state.doc;
   const decorations = computeDocDeco(editor.view);
   const innerDecorations = viewDecorations(editor.view);
-  const docNodeViewContextValue = useMemo(
+  const docNodeViewContextValue = useMemo<DocNodeViewContextValue>(
     () => ({
       setMount,
       node,
@@ -75,22 +107,26 @@ function ProseMirrorInner({
     }),
     [node, decorations, innerDecorations]
   );
+  // The provider values above the node views never change per transaction:
+  // ProseMirrorDoc and useEditorState read the latest values published here.
+  const [docNodeViewStore] = useState<DocNodeViewStore>(() => ({
+    current: docNodeViewContextValue,
+  }));
+  docNodeViewStore.current = docNodeViewContextValue;
 
   return (
     <EditorContext.Provider value={editor}>
-      <EditorStateContext.Provider value={state}>
-        <EditorStateSelectorsProvider>
-          <NodeViewContext.Provider value={nodeViewContextValue}>
-            <ChildDescriptionsContext.Provider
-              value={rootChildDescriptionsContextValue}
-            >
-              <DocNodeViewContext.Provider value={docNodeViewContextValue}>
-                {children}
-              </DocNodeViewContext.Provider>
-            </ChildDescriptionsContext.Provider>
-          </NodeViewContext.Provider>
-        </EditorStateSelectorsProvider>
-      </EditorStateContext.Provider>
+      <EditorStateSelectorsProvider state={state}>
+        <NodeViewContext.Provider value={nodeViewContextValue}>
+          <ChildDescriptionsContext.Provider
+            value={rootChildDescriptionsContextValue}
+          >
+            <DocNodeViewContext.Provider value={docNodeViewStore}>
+              {children}
+            </DocNodeViewContext.Provider>
+          </ChildDescriptionsContext.Provider>
+        </NodeViewContext.Provider>
+      </EditorStateSelectorsProvider>
     </EditorContext.Provider>
   );
 }

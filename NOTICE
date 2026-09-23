@@ -22,3 +22,16 @@ Modifications:
   runs its layout effect.
   Files: src/components/nodes/DocNodeView.tsx, src/components/LayoutGroup.tsx,
   src/components/__tests__/renderPasses.test.tsx.
+
+- Stable context above the node views: ProseMirrorInner publishes the editor
+  state and the doc node view props through a stable store instead of
+  per-transaction context values; useEditorState and ProseMirrorDoc render in
+  the dispatch's pass, EditorStateContext is removed, and the node view
+  component maps keep their context value while shallowly equal.
+  Files: src/components/ProseMirror.tsx, src/components/ProseMirrorDoc.tsx,
+  src/components/EditorStateSelectorsProvider.tsx,
+  src/contexts/EditorStateStoreContext.ts, src/contexts/EditorStateContext.ts
+  (removed), src/hooks/useEditor.ts, src/hooks/useEditorState.ts,
+  src/hooks/useEditorStoreConsumer.ts,
+  src/hooks/__tests__/useEditorEffect.test.tsx,
+  src/components/__tests__/renderPasses.test.tsx.

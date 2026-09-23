@@ -7,6 +7,7 @@ import { AbstractEditorView } from "../AbstractEditorView.js";
 import { ReactEditorView } from "../ReactEditorView.js";
 import { StaticEditorView } from "../StaticEditorView.js";
 import { EMPTY_STATE } from "../constants.js";
+import { EditorStateStore } from "../contexts/EditorStateStoreContext.js";
 import { beforeInputPlugin } from "../plugins/beforeInputPlugin.js";
 
 import { useClientLayoutEffect } from "./useClientLayoutEffect.js";
@@ -35,7 +36,8 @@ let didWarnValueDefaultValue = false;
  */
 export function useEditor<T extends HTMLElement = HTMLElement>(
   mount: T | null,
-  options: UseEditorOptions
+  options: UseEditorOptions,
+  stateStore?: EditorStateStore
 ) {
   if (process.env.NODE_ENV !== "production") {
     if (
@@ -76,6 +78,7 @@ export function useEditor<T extends HTMLElement = HTMLElement>(
           if (!options.state) {
             setState((s) => s.apply(tr));
           }
+          stateStore?.scheduleConsumers();
 
           if (options.dispatchTransaction) {
             options.dispatchTransaction.call(this, tr);
@@ -85,13 +88,14 @@ export function useEditor<T extends HTMLElement = HTMLElement>(
         if (!options.state) {
           setState((s) => s.apply(tr));
         }
+        stateStore?.scheduleConsumers();
 
         if (options.dispatchTransaction) {
           options.dispatchTransaction.call(this, tr);
         }
       }
     },
-    [options.dispatchTransaction, options.state]
+    [options.dispatchTransaction, options.state, stateStore]
   );
 
   const directEditorProps = {
@@ -126,6 +130,13 @@ export function useEditor<T extends HTMLElement = HTMLElement>(
   }, [createEditorView, mount]);
 
   useClientLayoutEffect(() => {
+    // When the state changed outside of a dispatch and ProseMirrorDoc's
+    // element was reused, it has not rendered the new document yet. Commit
+    // it to the view in the follow-up render instead of against stale DOM.
+    if (stateStore?.syncConsumers()) {
+      forceUpdate();
+      return;
+    }
     // Ensure that the EditorView hasn't been destroyed before
     // running effects. Running effects will reattach selection
     // change listeners if the EditorView has been destroyed.

@@ -2,13 +2,14 @@
 import type { EditorState } from "prosemirror-state";
 import { useContext } from "react";
 
-import { EditorStateContext } from "../contexts/EditorStateContext.js";
+import { EditorStateStoreContext } from "../contexts/EditorStateStoreContext.js";
+
+import { useEditorStoreConsumer } from "./useEditorStoreConsumer.js";
 
 /**
  * Provides access to the current EditorState value.
  */
 export function useEditorState(): EditorState {
-  const editorState = useContext(EditorStateContext);
-
-  return editorState;
+  const store = useContext(EditorStateStoreContext);
+  return useEditorStoreConsumer(store.getState);
 }

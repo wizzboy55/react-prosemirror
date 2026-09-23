@@ -1,11 +1,36 @@
 import { EditorState } from "prosemirror-state";
 import { createContext } from "react";
 
+/**
+ * A component that renders from the store rather than from a context value,
+ * so that no provider above the node views changes on every transaction.
+ */
+export interface EditorStoreConsumer {
+  /** Schedules a render of the consuming component. */
+  rerender(): void;
+  /** Whether its last committed render read an outdated value. */
+  isStale(): boolean;
+  /** Renders the document, so the view must not commit while it is stale. */
+  rendersDocument?: boolean;
+}
+
 export interface EditorStateStore {
   getState: () => EditorState;
   subscribe: (listener: () => void) => () => void;
   setState: (state: EditorState) => void;
   notifyListeners: () => void;
+  addConsumer: (consumer: EditorStoreConsumer) => () => void;
+  /**
+   * Called while a transaction is dispatched, in the same batch as the state
+   * update, so consumers render in the same pass as the editor.
+   */
+  scheduleConsumers: () => void;
+  /**
+   * Called after the editor commits: re-renders the consumers that a change
+   * made outside of a dispatch left behind. Returns whether one of them
+   * renders the document.
+   */
+  syncConsumers: () => boolean;
 }
 
 export function createEditorStateStore(): EditorStateStore {
@@ -13,6 +38,7 @@ export function createEditorStateStore(): EditorStateStore {
   let state: EditorState = null as any;
   let pendingNotify = false;
   const listeners = new Set<() => void>();
+  const consumers = new Set<EditorStoreConsumer>();
 
   return {
     getState: () => state,
@@ -31,6 +57,24 @@ export function createEditorStateStore(): EditorStateStore {
         pendingNotify = false;
         listeners.forEach((l) => l());
       }
+    },
+    addConsumer: (consumer) => {
+      consumers.add(consumer);
+      return () => {
+        consumers.delete(consumer);
+      };
+    },
+    scheduleConsumers: () => {
+      consumers.forEach((consumer) => consumer.rerender());
+    },
+    syncConsumers: () => {
+      let documentStale = false;
+      consumers.forEach((consumer) => {
+        if (!consumer.isStale()) return;
+        consumer.rerender();
+        if (consumer.rendersDocument) documentStale = true;
+      });
+      return documentStale;
     },
   };
 }
