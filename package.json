@@ -22,6 +22,7 @@
   "files": [
     "README.md",
     "LICENSE.txt",
+    "NOTICE",
     "dist"
   ],
   "repository": {
@@ -46,6 +47,7 @@
     "fix:toc": "markdown-toc --bullets='-' -i README.md",
     "fix": "concurrently -P 'npm:fix:* {@}' --",
     "prepack": "yarn build",
+    "prepare": "npm run build",
     "test:wdio": "wdio run ./wdio.conf.ts",
     "test:unit": "jest",
     "test": "yarn test:unit && yarn test:wdio"

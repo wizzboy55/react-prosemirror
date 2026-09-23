@@ -1,0 +1,17 @@
+@handlewithcare/react-prosemirror, FlightSpec fork
+
+This package is a modified version of @handlewithcare/react-prosemirror 3.2.5
+(https://github.com/handlewithcarecollective/react-prosemirror, tag v3.2.5),
+Copyright (c) 2025 Handle with Care Collective, licensed under the Apache
+License, Version 2.0 (see LICENSE.txt).
+
+The modifications live on the `flightspec` branch of
+https://github.com/wizzboy55/react-prosemirror, one commit per change, so each
+can be upstreamed or dropped on its own. They were made for the FlightSpec
+document editor in 2026 and are distributed under the same license.
+
+Modifications:
+
+- Packaging: build on install from a git dependency (`prepare` script), an npm
+  lockfile for that build, and this NOTICE.
+  Files: package.json, package-lock.json, NOTICE.
