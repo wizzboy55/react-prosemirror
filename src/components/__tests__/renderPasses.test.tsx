@@ -191,6 +191,37 @@ describe("mount", () => {
     ).toEqual([null, null]);
   });
 
+  it("mounts the view without moving the document's nodes", () => {
+    const container = document.body.appendChild(document.createElement("div"));
+    const observer = new MutationObserver(() => undefined);
+    observer.observe(container, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+    const { getByTestId } = render(
+      <ProseMirror defaultState={createState()}>
+        <ProseMirrorDoc data-testid="doc" />
+      </ProseMirror>,
+      { container }
+    );
+    const doc = getByTestId("doc");
+    const records = observer.takeRecords();
+    observer.disconnect();
+    // React inserts the document in one mutation; the view changes nothing.
+    expect(
+      records
+        .filter(
+          (record) => record.target === doc || doc.contains(record.target)
+        )
+        .map((record) => `${record.type} ${record.attributeName ?? ""}`)
+    ).toEqual([]);
+    expect(doc.getAttribute("contenteditable")).toBe("true");
+    expect(doc.className).toBe("ProseMirror");
+    container.remove();
+  });
+
   it("renders each React node view once on mount", () => {
     let commits = 0;
     const renders: number[] = [];

@@ -13,9 +13,13 @@ import {
   changedNodeViews,
   getEditable,
 } from "./AbstractEditorView.js";
+import { browser } from "./browser.js";
 import { EMPTY_STATE } from "./constants.js";
 import { DOMNode, DOMSelection, DOMSelectionRange } from "./dom.js";
 import { NodeViewDesc, ViewDesc } from "./viewdesc.js";
+
+// The events whose listeners the base class registers as passive.
+const PASSIVE_EVENTS = new Set(["touchstart", "touchmove"]);
 
 interface DOMObserver {
   observer: MutationObserver | null;
@@ -31,6 +35,7 @@ interface DOMObserver {
 }
 
 interface InputState {
+  eventHandlers: Record<string, (event: Event) => void>;
   composing: boolean;
   compositionID: number;
   compositionNode: Text | null;
@@ -93,45 +98,43 @@ export class ReactEditorView extends EditorView implements AbstractEditorView {
   public cursorWrapped: boolean;
 
   constructor(place: { mount: HTMLElement }, props: DirectEditorProps) {
-    // Prevent the base class from destroying the React-managed nodes.
-    // Restore them below after invoking the base class constructor.
-    const reactContent = [...place.mount.childNodes];
+    // The base class renders its initial document into its element, which
+    // would detach and re-insert every React-managed node of the mounted
+    // document. Build it on a stand-in element, then move its input listeners
+    // to the React-managed element, so neither its nodes nor its attributes
+    // are touched.
+    const standIn = place.mount.ownerDocument.createElement("div");
 
-    // Prevent the base class from mutating the React-managed attributes.
-    // Restore them below after invoking the base class constructor.
-    const reactAttrs = [...place.mount.attributes];
-    for (const attr of reactAttrs) {
-      place.mount.removeAttributeNode(attr);
+    // Call the superclass constructor with only a state and no plugins.
+    // We'll set everything else ourselves and apply props during layout.
+    super({ mount: standIn }, { state: EMPTY_STATE });
+    this.domObserver.stop();
+    this.domObserver.observer = null;
+    this.domObserver.queue = [];
+    const originalOnSelectionChange = this.domObserver.onSelectionChange;
+    this.domObserver.onSelectionChange = () => {
+      // During a composition, we completely pause React-driven
+      // selection and DOM updates. Compositions are "fragile";
+      // in Safari, even updating the selection to the same
+      // position it's already set to will end the current
+      // composition.
+      if (this.composing) return;
+      originalOnSelectionChange();
+    };
+
+    for (const type in this.input.eventHandlers) {
+      const handler = this.input.eventHandlers[type] as EventListener;
+      standIn.removeEventListener(type, handler);
+      place.mount.addEventListener(
+        type,
+        handler,
+        PASSIVE_EVENTS.has(type) ? { passive: true } : undefined
+      );
     }
-
-    try {
-      // Call the superclass constructor with only a state and no plugins.
-      // We'll set everything else ourselves and apply props during layout.
-      super(place, { state: EMPTY_STATE });
-      this.domObserver.stop();
-      this.domObserver.observer = null;
-      this.domObserver.queue = [];
-      const originalOnSelectionChange = this.domObserver.onSelectionChange;
-      this.domObserver.onSelectionChange = () => {
-        // During a composition, we completely pause React-driven
-        // selection and DOM updates. Compositions are "fragile";
-        // in Safari, even updating the selection to the same
-        // position it's already set to will end the current
-        // composition.
-        if (this.composing) return;
-        originalOnSelectionChange();
-      };
-    } finally {
-      place.mount.replaceChildren(...reactContent);
-
-      for (const attr of place.mount.attributes) {
-        place.mount.removeAttributeNode(attr);
-      }
-
-      for (const attr of reactAttrs) {
-        place.mount.setAttributeNode(attr);
-      }
-    }
+    // The base class adds this for Safari, where an input handler keeps a
+    // composition from vanishing when Enter is pressed.
+    if (browser.safari) place.mount.addEventListener("input", () => null);
+    (this as { dom: HTMLElement }).dom = place.mount;
 
     this.prevState = EMPTY_STATE;
     this.nextProps = props;

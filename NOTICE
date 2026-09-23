@@ -93,3 +93,11 @@ Modifications:
   src/contexts/IgnoreMutationContext.ts (removed), src/hooks/useSelectNode.ts,
   src/hooks/useStopEvent.ts, src/hooks/useIgnoreMutation.ts,
   src/components/__tests__/renderPasses.test.tsx.
+
+- Mount without moving the document's nodes: ReactEditorView builds the base
+  EditorView on a stand-in element and moves the input listeners the base
+  class attached to it onto the React-managed element, instead of letting the
+  base class render its initial document into that element and restoring the
+  React-managed nodes and attributes afterwards.
+  Files: src/ReactEditorView.ts,
+  src/components/__tests__/renderPasses.test.tsx.
