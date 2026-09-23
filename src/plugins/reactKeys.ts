@@ -89,7 +89,7 @@ export interface ReactKeysOptions {
    * A state whose keys carry over to the state this plugin first initializes
    * in, so replacing the whole state does not remount unchanged nodes.
    */
-  keysFrom?: EditorState;
+  keysFrom?: EditorState | undefined;
 }
 
 function keyEveryNode(doc: Node): KeyIndex {
