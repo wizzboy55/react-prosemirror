@@ -16,7 +16,10 @@ import { EditorContext } from "../contexts/EditorContext.js";
 import { ReactWidgetDecoration } from "../decorations/ReactWidgetType.js";
 import { InternalDecorationSource } from "../decorations/internalTypes.js";
 import { iterDeco } from "../decorations/iterDeco.js";
-import { reactKeysPluginKey } from "../plugins/reactKeys.js";
+import {
+  ReactKeysPluginState,
+  reactKeysPluginKey,
+} from "../plugins/reactKeys.js";
 import { htmlAttrsToReactProps, mergeReactProps } from "../props.js";
 import { sameOuterDeco } from "../viewdesc.js";
 
@@ -256,11 +259,11 @@ function createKey(
   offset: number,
   index: number,
   type: Child["type"],
-  posToKey: Map<number, string> | undefined,
+  keys: ReactKeysPluginState | undefined,
   widget?: ReactWidgetDecoration | Decoration
 ) {
   const pos = innerPos + offset;
-  const key = posToKey?.get(pos);
+  const key = keys?.keyAt(pos);
 
   if (type === "widget" || type === "native-widget") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -283,7 +286,7 @@ function createKey(
 
   const parentPos = innerPos - 1;
 
-  const parentKey = posToKey?.get(parentPos);
+  const parentKey = keys?.keyAt(parentPos);
 
   if (parentKey) return `${parentKey}-${offset}`;
 
@@ -440,7 +443,7 @@ export const ChildNodeViews = memo(function ChildNodeViews({
     node,
     innerDecorations,
     (widget, isNative, offset, index) => {
-      const posToKey = reactKeysPluginKey.getState(view.state)?.posToKey;
+      const keys = reactKeysPluginKey.getState(view.state);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const widgetMarks = ((widget as any).type.spec.marks as Mark[]) ?? [];
       let key;
@@ -450,7 +453,7 @@ export const ChildNodeViews = memo(function ChildNodeViews({
           offset,
           index,
           "native-widget",
-          posToKey,
+          keys,
           widget
         );
         const child = {
@@ -469,14 +472,7 @@ export const ChildNodeViews = memo(function ChildNodeViews({
         }
         keysSeen.set(key, keysSeen.size);
       } else {
-        key = createKey(
-          getInnerPos(),
-          offset,
-          index,
-          "widget",
-          posToKey,
-          widget
-        );
+        key = createKey(getInnerPos(), offset, index, "widget", keys, widget);
         const child = {
           type: "widget",
           widget: widget as ReactWidgetDecoration,
@@ -501,8 +497,8 @@ export const ChildNodeViews = memo(function ChildNodeViews({
       );
     },
     (childNode, outerDeco, innerDeco, offset, index) => {
-      const posToKey = reactKeysPluginKey.getState(view.state)?.posToKey;
-      const key = createKey(getInnerPos(), offset, index, "node", posToKey);
+      const keys = reactKeysPluginKey.getState(view.state);
+      const key = createKey(getInnerPos(), offset, index, "node", keys);
       const child = {
         type: "node",
         node: childNode,

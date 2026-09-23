@@ -42,3 +42,13 @@ Modifications:
   Files: src/contexts/EditorStateStoreContext.ts,
   src/components/nodes/NodeView.tsx,
   src/components/__tests__/renderPasses.test.tsx.
+
+- Incremental reactKeys: keys live in a persistent position-sorted index, so a
+  transaction remaps only the entries inside its changed range and keys only
+  the node starts that range introduced (identical keys to the full remap);
+  posToKey/keyToPos are built on first read and keyAt() reads one key.
+  reactKeys({ keysFrom }) carries keys across a whole-state replacement by
+  pairing the old and new documents, so unchanged nodes are not remounted.
+  Files: src/plugins/reactKeys.ts, src/plugins/keyIndex.ts (new),
+  src/components/ChildNodeViews.tsx,
+  src/plugins/__tests__/reactKeys.incremental.test.ts (new).
