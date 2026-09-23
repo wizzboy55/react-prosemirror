@@ -75,3 +75,21 @@ Modifications:
   src/tiptap/hooks/useTiptapEditorEffect.ts,
   src/hooks/__tests__/useEditorEffect.test.tsx,
   src/components/__tests__/renderPasses.test.tsx.
+
+- Fewer fibers per node and an ordered child build: NodeView keys its node
+  view by the remount count and by the component or constructor, replacing
+  RemountableNodeView and the per-type wrapper component; one provider
+  carries a node view's select, stop-event and ignore-mutation handlers (a
+  mark view passes them on with its own ignore-mutation handler), replacing
+  three; text node views read the child descriptions context directly.
+  ChildNodeViews builds its children in document order instead of sorting
+  them, falling back to the sort only when a key repeats, and reads the node
+  keys once per child list.
+  Files: src/components/nodes/NodeView.tsx,
+  src/components/nodes/ReactNodeView.tsx,
+  src/components/marks/ReactMarkView.tsx, src/components/ChildNodeViews.tsx,
+  src/contexts/NodeViewHandlersContext.ts (new),
+  src/contexts/SelectNodeContext.ts, src/contexts/StopEventContext.ts and
+  src/contexts/IgnoreMutationContext.ts (removed), src/hooks/useSelectNode.ts,
+  src/hooks/useStopEvent.ts, src/hooks/useIgnoreMutation.ts,
+  src/components/__tests__/renderPasses.test.tsx.

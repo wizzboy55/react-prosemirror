@@ -11,7 +11,6 @@ import React, {
   useCallback,
   useContext,
   useLayoutEffect,
-  useMemo,
   useReducer,
   useRef,
   useSyncExternalStore,
@@ -30,13 +29,25 @@ type Props = {
   getPos: () => number;
   outerDeco: readonly Decoration[];
   innerDeco: DecorationSource;
-  forceRemount: () => void;
 };
 
-export const NodeView = memo(function NodeView({
-  forceRemount,
-  ...props
-}: Props) {
+// Node view components and constructors are numbered so that a node view
+// keyed by them remounts when either changes.
+const viewTypeIds = new WeakMap<object, number>();
+let nextViewTypeId = 0;
+
+function viewTypeId(viewType: object) {
+  let id = viewTypeIds.get(viewType);
+  if (id === undefined) {
+    id = nextViewTypeId++;
+    viewTypeIds.set(viewType, id);
+  }
+  return id;
+}
+
+export const NodeView = memo(function NodeView(props: Props) {
+  // Leaving the frozen state remounts the node view.
+  const [remounts, forceRemount] = useReducer((x: number) => x + 1, 0);
   const renderRef = useRef<JSX.Element | null>(null);
   // The store notifies only when the frozen position changes, so a transaction
   // does not run one getPos() per node view.
@@ -61,22 +72,6 @@ export const NodeView = memo(function NodeView({
     | NodeViewConstructor
     | undefined;
 
-  // Construct a wrapper component so that the node view remounts when either
-  // its component or constructor changes. A React node view would remount if
-  // its underlying component changed without this wrapper, but a custom node
-  // view otherwise uses the same React components for all custom node views.
-  const Component = useMemo(() => {
-    if (constructor) {
-      return function NodeView(props: Omit<Props, "forceRemount">) {
-        return <NodeViewConstructorView constructor={constructor} {...props} />;
-      };
-    } else {
-      return function NodeView(props: Omit<Props, "forceRemount">) {
-        return <ReactNodeView component={component} {...props} />;
-      };
-    }
-  }, [constructor, component]);
-
   // Protect content while frozen, and also through the single render where we
   // leave the frozen state: `committedFrozenRef` still reflects the previous
   // commit, so we keep returning the exact same cached element reference.
@@ -84,9 +79,22 @@ export const NodeView = memo(function NodeView({
     (frozen || committedFrozenRef.current) && renderRef.current != null;
 
   if (!protecting) {
+    // The key remounts the node view when its component or constructor
+    // changes: a React node view would otherwise keep its state across a
+    // component change, and every custom node view renders the same
+    // components.
+    const key = `${remounts}:${viewTypeId(constructor ?? component)}`;
     renderRef.current = (
       <GetPosContext.Provider value={props.getPos}>
-        <Component {...props} />
+        {constructor ? (
+          <NodeViewConstructorView
+            key={key}
+            constructor={constructor}
+            {...props}
+          />
+        ) : (
+          <ReactNodeView key={key} component={component} {...props} />
+        )}
       </GetPosContext.Provider>
     );
   }
@@ -96,7 +104,7 @@ export const NodeView = memo(function NodeView({
     committedFrozenRef.current = frozen;
 
     if (wasFrozen && !frozen) forceRemount();
-  }, [frozen, forceRemount]);
+  }, [frozen]);
 
   return renderRef.current;
 });
@@ -104,10 +112,3 @@ export const NodeView = memo(function NodeView({
 export const GetPosContext = createContext<() => number>(
   null as unknown as () => number
 );
-
-export function RemountableNodeView(props: Omit<Props, "forceRemount">) {
-  const [key, forceRemount] = useReducer((x) => x + 1, 0);
-  return (
-    <NodeView key={key.toString()} {...props} forceRemount={forceRemount} />
-  );
-}

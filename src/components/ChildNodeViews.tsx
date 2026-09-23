@@ -29,7 +29,7 @@ import { TextNodeView } from "./TextNodeView.js";
 import { TrailingHackView } from "./TrailingHackView.js";
 import { WidgetView } from "./WidgetView.js";
 import { MarkView } from "./marks/MarkView.js";
-import { RemountableNodeView } from "./nodes/NodeView.js";
+import { NodeView } from "./nodes/NodeView.js";
 
 export function wrapInDeco(reactNode: JSX.Element | string, deco: Decoration) {
   const {
@@ -118,6 +118,7 @@ const ChildView = memo(function ChildView({
   getInnerPos: () => number;
 }) {
   const editor = useContext(EditorContext);
+  const { siblingsRef, parentRef } = useContext(ChildDescriptionsContext);
 
   const childRef = useRef<Child>(child);
   childRef.current = child;
@@ -137,20 +138,17 @@ const ChildView = memo(function ChildView({
   ) : child.type === "hack" ? (
     <child.component key={child.key} getPos={getPos} />
   ) : child.node.isText ? (
-    <ChildDescriptionsContext.Consumer key={child.key}>
-      {({ siblingsRef, parentRef }) => (
-        <TextNodeView
-          editor={editor}
-          node={child.node}
-          getPos={getPos}
-          siblingsRef={siblingsRef}
-          parentRef={parentRef}
-          decorations={child.outerDeco}
-        />
-      )}
-    </ChildDescriptionsContext.Consumer>
+    <TextNodeView
+      key={child.key}
+      editor={editor}
+      node={child.node}
+      getPos={getPos}
+      siblingsRef={siblingsRef}
+      parentRef={parentRef}
+      decorations={child.outerDeco}
+    />
   ) : (
-    <RemountableNodeView
+    <NodeView
       key={child.key}
       node={child.node}
       getPos={getPos}
@@ -366,7 +364,7 @@ const ChildElement = memo(
             {element}
           </MarkView>
         ),
-        <RemountableNodeView
+        <NodeView
           key={child.key}
           outerDeco={child.outerDeco}
           node={child.node}
@@ -417,24 +415,24 @@ function createChildElements(
   });
 }
 
-export const ChildNodeViews = memo(function ChildNodeViews({
-  getPos,
-  node,
-  innerDecorations,
-}: {
-  getPos: () => number;
-  node: Node | undefined;
-  innerDecorations: DecorationSource;
-}) {
-  const editor = useContext(EditorContext);
-
-  const getInnerPos = useCallback(() => getPos() + 1, [getPos]);
-
-  const childMap = useRef(new Map<string, Child>()).current;
-
-  if (!node) return null;
-
+/**
+ * The child views of `node` in document order, reusing the previous render's
+ * child objects from `childMap` where they are unchanged. A module-level
+ * function, so that the closures it creates, which hold this render's node
+ * keys, do not share a scope with the component's memoized callbacks.
+ */
+function buildChildren(
+  node: Node,
+  innerDecorations: DecorationSource,
+  childMap: Map<string, Child>,
+  keys: ReactKeysPluginState | undefined,
+  getInnerPos: () => number
+): Child[] {
   const keysSeen = new Map<string, number>();
+  // The children in document order. A key seen twice falls back to ordering
+  // the children by the position each key was last seen at.
+  let children: Child[] = [];
+  let repeatedKey = false;
 
   let widgetChildren: Array<ChildNativeWidget | ChildWidget> = [];
   let lastNodeChild: ChildNode | null = null;
@@ -443,7 +441,6 @@ export const ChildNodeViews = memo(function ChildNodeViews({
     node,
     innerDecorations,
     (widget, isNative, offset, index) => {
-      const keys = reactKeysPluginKey.getState(editor.view.state);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const widgetMarks = ((widget as any).type.spec.marks as Mark[]) ?? [];
       let key;
@@ -470,7 +467,6 @@ export const ChildNodeViews = memo(function ChildNodeViews({
         } else {
           childMap.set(key, child);
         }
-        keysSeen.set(key, keysSeen.size);
       } else {
         key = createKey(getInnerPos(), offset, index, "widget", keys, widget);
         const child = {
@@ -487,9 +483,11 @@ export const ChildNodeViews = memo(function ChildNodeViews({
         } else {
           childMap.set(key, child);
         }
-        keysSeen.set(key, keysSeen.size);
       }
+      if (keysSeen.has(key)) repeatedKey = true;
+      keysSeen.set(key, keysSeen.size);
       const child = childMap.get(key) as ChildWidget | ChildNativeWidget;
+      children.push(child);
       widgetChildren.push(child);
       adjustWidgetMarksForward(
         lastNodeChild,
@@ -497,7 +495,6 @@ export const ChildNodeViews = memo(function ChildNodeViews({
       );
     },
     (childNode, outerDeco, innerDeco, offset, index) => {
-      const keys = reactKeysPluginKey.getState(editor.view.state);
       const key = createKey(getInnerPos(), offset, index, "node", keys);
       const child = {
         type: "node",
@@ -517,7 +514,9 @@ export const ChildNodeViews = memo(function ChildNodeViews({
         childMap.set(key, child);
         lastNodeChild = child;
       }
+      if (keysSeen.has(key)) repeatedKey = true;
       keysSeen.set(key, keysSeen.size);
+      children.push(lastNodeChild);
       adjustWidgetMarksBack(widgetChildren, lastNodeChild);
       widgetChildren = [];
     }
@@ -529,11 +528,41 @@ export const ChildNodeViews = memo(function ChildNodeViews({
     }
   }
 
-  const children = Array.from(childMap.values()).sort(
-    // We already ensured that these existed in keysSeen in the previous
-    // step
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    (a, b) => keysSeen.get(a.key)! - keysSeen.get(b.key)!
+  if (repeatedKey) {
+    children = Array.from(childMap.values()).sort(
+      // We already ensured that these existed in keysSeen in the previous
+      // step
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      (a, b) => keysSeen.get(a.key)! - keysSeen.get(b.key)!
+    );
+  }
+
+  return children;
+}
+
+export const ChildNodeViews = memo(function ChildNodeViews({
+  getPos,
+  node,
+  innerDecorations,
+}: {
+  getPos: () => number;
+  node: Node | undefined;
+  innerDecorations: DecorationSource;
+}) {
+  const editor = useContext(EditorContext);
+
+  const getInnerPos = useCallback(() => getPos() + 1, [getPos]);
+
+  const childMap = useRef(new Map<string, Child>()).current;
+
+  if (!node) return null;
+
+  const children = buildChildren(
+    node,
+    innerDecorations,
+    childMap,
+    reactKeysPluginKey.getState(editor.view.state),
+    getInnerPos
   );
 
   if (node.isTextblock) {

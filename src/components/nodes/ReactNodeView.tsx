@@ -12,18 +12,12 @@ import React, {
 
 import { ChildDescriptionsContext } from "../../contexts/ChildDescriptionsContext.js";
 import {
-  IgnoreMutation,
-  IgnoreMutationContext,
-} from "../../contexts/IgnoreMutationContext.js";
-import {
   DeselectNode,
+  IgnoreMutation,
+  NodeViewHandlersContext,
   SelectNode,
-  SelectNodeContext,
-} from "../../contexts/SelectNodeContext.js";
-import {
   StopEvent,
-  StopEventContext,
-} from "../../contexts/StopEventContext.js";
+} from "../../contexts/NodeViewHandlersContext.js";
 import { DOMNode } from "../../dom.js";
 import { useClientLayoutEffect } from "../../hooks/useClientLayoutEffect.js";
 import { useForceUpdate } from "../../hooks/useForceUpdate.js";
@@ -100,6 +94,11 @@ export const ReactNodeView = memo(function ReactNodeView({
       };
     };
   }, []);
+
+  const handlers = useMemo(
+    () => ({ setSelectNode, setStopEvent, setIgnoreMutation }),
+    [setSelectNode, setStopEvent, setIgnoreMutation]
+  );
 
   const nodeViewDescProps = useMemo(
     () => ({
@@ -244,14 +243,10 @@ export const ReactNodeView = memo(function ReactNodeView({
   );
 
   return (
-    <SelectNodeContext.Provider value={setSelectNode}>
-      <StopEventContext.Provider value={setStopEvent}>
-        <IgnoreMutationContext.Provider value={setIgnoreMutation}>
-          <ChildDescriptionsContext.Provider value={childContextValue}>
-            {element}
-          </ChildDescriptionsContext.Provider>
-        </IgnoreMutationContext.Provider>
-      </StopEventContext.Provider>
-    </SelectNodeContext.Provider>
+    <NodeViewHandlersContext.Provider value={handlers}>
+      <ChildDescriptionsContext.Provider value={childContextValue}>
+        {element}
+      </ChildDescriptionsContext.Provider>
+    </NodeViewHandlersContext.Provider>
   );
 });

@@ -23,6 +23,10 @@ import { EditorContext } from "../../contexts/EditorContext.js";
 import { EditorStateStoreContext } from "../../contexts/EditorStateStoreContext.js";
 import { LayoutGroupContext } from "../../contexts/LayoutGroupContext.js";
 import { NodeViewContext } from "../../contexts/NodeViewContext.js";
+import {
+  NodeViewHandlers,
+  NodeViewHandlersContext,
+} from "../../contexts/NodeViewHandlersContext.js";
 import { useEditorEffect } from "../../hooks/useEditorEffect.js";
 import { useEditorEventListener } from "../../hooks/useEditorEventListener.js";
 import { useEditorState } from "../../hooks/useEditorState.js";
@@ -32,6 +36,7 @@ import { useMergedDOMRefs } from "../../refs.js";
 import { LayoutGroup } from "../LayoutGroup.js";
 import { ProseMirror } from "../ProseMirror.js";
 import { DocNodeViewContext, ProseMirrorDoc } from "../ProseMirrorDoc.js";
+import { MarkViewComponentProps } from "../marks/MarkViewComponentProps.js";
 import { NodeViewComponentProps } from "../nodes/NodeViewComponentProps.js";
 
 const schema = new Schema({
@@ -288,6 +293,134 @@ describe("mount", () => {
       );
     });
     expect(calls).toEqual(["component", "prop"]);
+  });
+});
+
+describe("node view structure", () => {
+  function fibersBetween(inner: Node, outer: Element) {
+    const key = Object.keys(inner).find((k) => k.startsWith("__reactFiber$"))!;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let fiber = (inner as any)[key];
+    let count = 0;
+    while (fiber && fiber.stateNode !== outer) {
+      count++;
+      fiber = fiber.return;
+    }
+    return count;
+  }
+
+  it("renders a paragraph through twelve fibers below the document", () => {
+    const { getByTestId } = render(
+      <ProseMirror defaultState={createState()}>
+        <ProseMirrorDoc data-testid="doc" />
+      </ProseMirror>
+    );
+    const doc = getByTestId("doc");
+    expect(fibersBetween(doc.querySelector("p")!, doc)).toBe(12);
+  });
+
+  it("gives a mark view its node view's handlers and its own mutation filter", () => {
+    const markSchema = new Schema({
+      nodes: schema.spec.nodes,
+      marks: { strong: { toDOM: () => ["strong", 0] } },
+    });
+    const seen: Record<string, NodeViewHandlers> = {};
+    const Paragraph = forwardRef<HTMLParagraphElement, NodeViewComponentProps>(
+      function Paragraph({ nodeProps, children, ...props }, ref) {
+        seen["paragraph"] = useContext(NodeViewHandlersContext);
+        return (
+          <p {...props} ref={useMergedDOMRefs(ref, nodeProps.contentDOMRef)}>
+            {children}
+          </p>
+        );
+      }
+    );
+    const Strong = forwardRef<HTMLElement, MarkViewComponentProps>(
+      function Strong({ markProps, children, ...props }, ref) {
+        seen["strong"] = useContext(NodeViewHandlersContext);
+        return (
+          <strong
+            {...props}
+            ref={useMergedDOMRefs(ref, markProps.contentDOMRef)}
+          >
+            {children}
+          </strong>
+        );
+      }
+    );
+    const state = EditorState.create({
+      doc: markSchema.node("doc", null, [
+        markSchema.node("paragraph", null, [
+          markSchema.text("bold", [markSchema.marks.strong!.create()]),
+        ]),
+      ]),
+      plugins: [reactKeys()],
+    });
+    render(
+      <ProseMirror
+        defaultState={state}
+        nodeViewComponents={{ paragraph: Paragraph }}
+        markViewComponents={{ strong: Strong }}
+      >
+        <ProseMirrorDoc />
+      </ProseMirror>
+    );
+    const { paragraph, strong } = seen;
+    expect(strong!.setSelectNode).toBe(paragraph!.setSelectNode);
+    expect(strong!.setStopEvent).toBe(paragraph!.setStopEvent);
+    expect(strong!.setIgnoreMutation).not.toBe(paragraph!.setIgnoreMutation);
+  });
+
+  it("reads the node keys once per child list a transaction renders", () => {
+    let view: EditorView | null = null;
+    function CaptureView() {
+      useEditorEffect((v) => {
+        view = v;
+      });
+      return null;
+    }
+    const state = EditorState.create({
+      doc: schema.node(
+        "doc",
+        null,
+        Array.from({ length: 30 }, (_, i) =>
+          schema.node("paragraph", null, [schema.text(`p${i}`)])
+        )
+      ),
+      plugins: [reactKeys()],
+    });
+    render(
+      <ProseMirror defaultState={state}>
+        <ProseMirrorDoc />
+        <CaptureView />
+      </ProseMirror>
+    );
+    const original = reactKeysPluginKey.getState.bind(reactKeysPluginKey);
+    const callers: string[] = [];
+    const getState = jest
+      .spyOn(reactKeysPluginKey, "getState")
+      .mockImplementation((state) => {
+        const frame =
+          (new Error().stack ?? "")
+            .split("\n")
+            .find((line) => /\/src\/(?!.*__tests__)/.test(line)) ?? "";
+        callers.push(
+          frame
+            .trim()
+            .replace(/^at /, "")
+            .replace(/\(.*\/src\//, "(")
+        );
+        return original(state);
+      });
+    act(() => {
+      view!.dispatch(view!.state.tr.insertText("x", 2));
+    });
+    getState.mockRestore();
+    // The document's and the edited paragraph's child lists: one read each,
+    // not one per child.
+    expect(
+      callers.filter((caller) => caller.includes("ChildNodeViews"))
+    ).toHaveLength(2);
   });
 });
 
@@ -669,7 +802,8 @@ describe("composition freeze", () => {
       const { tr } = view().state;
       view().dispatch(tr.setSelection(TextSelection.create(tr.doc, 3)));
     });
-    expect(getState.mock.calls.length).toBeLessThan(5);
+    const reads = getState.mock.calls.length;
     getState.mockRestore();
+    expect(reads).toBeLessThan(5);
   });
 });

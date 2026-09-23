@@ -4,6 +4,7 @@ import React, {
   ReactNode,
   memo,
   useCallback,
+  useContext,
   useMemo,
   useRef,
 } from "react";
@@ -11,8 +12,8 @@ import React, {
 import { ChildDescriptionsContext } from "../../contexts/ChildDescriptionsContext.js";
 import {
   IgnoreMutation,
-  IgnoreMutationContext,
-} from "../../contexts/IgnoreMutationContext.js";
+  NodeViewHandlersContext,
+} from "../../contexts/NodeViewHandlersContext.js";
 import { DOMNode } from "../../dom.js";
 import { useMarkViewDescription } from "../../hooks/useMarkViewDescription.js";
 
@@ -47,6 +48,13 @@ export const ReactMarkView = memo(function ReactMarkView({
       };
     };
   }, []);
+
+  // The node view's handlers, with this mark view's own mutation filter.
+  const parentHandlers = useContext(NodeViewHandlersContext);
+  const handlers = useMemo(
+    () => ({ ...parentHandlers, setIgnoreMutation }),
+    [parentHandlers, setIgnoreMutation]
+  );
 
   const markViewDescProps = useMemo(
     () => ({
@@ -105,10 +113,10 @@ export const ReactMarkView = memo(function ReactMarkView({
   } satisfies MarkViewComponentProps;
 
   return (
-    <IgnoreMutationContext.Provider value={setIgnoreMutation}>
+    <NodeViewHandlersContext.Provider value={handlers}>
       <ChildDescriptionsContext.Provider value={childContextValue}>
         <Component {...props}>{children}</Component>
       </ChildDescriptionsContext.Provider>
-    </IgnoreMutationContext.Provider>
+    </NodeViewHandlersContext.Provider>
   );
 });
